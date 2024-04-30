@@ -59,11 +59,11 @@ const Status QU_Insert(const string &relation,
 				{
 				case INTEGER:
 					value = atoi((char *)attrList[j].attrValue);
-					memcpy(outputData + outputOffset, (char *)attrList[j].attrValue, attrDescArray[i].attrLen);
+					memcpy(outputData + outputOffset, &value, attrDescArray[i].attrLen);
 					break;
 				case FLOAT:
 					fValue = atof((char *)attrList[j].attrValue);
-					memcpy(outputData + outputOffset, (char *)attrList[j].attrValue, attrDescArray[i].attrLen);
+					memcpy(outputData + outputOffset, &fValue, attrDescArray[i].attrLen);
 					break;
 				case STRING:
 					memcpy((char*) outputData + outputOffset, (char *)attrList[j].attrValue, attrDescArray[i].attrLen);

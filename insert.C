@@ -89,7 +89,6 @@ const Status QU_Insert(const string &relation,
 	{
 		return status;
 	}
-
 	// Return successfully
 	return OK;
 }

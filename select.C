@@ -31,7 +31,6 @@ const Status QU_Select(const string & result,
 
 	Status status;
 	AttrDesc projNamesDescs[projCnt];
-	
 	//convert attrInfo to attrDesc
 	for (int i = 0; i < projCnt; i++) {
 		status = attrCat->getInfo(projNames[i].relName, projNames[i].attrName, projNamesDescs[i]);
@@ -39,20 +38,23 @@ const Status QU_Select(const string & result,
 			return status;
 		}
 	}
-	
+
+	int reclen1 = 0;
+	for(int i = 0; i < projCnt; i++){
+		reclen1 += projNamesDescs[i].attrLen;
+	}
+
 	//get comparison information
-	AttrDesc *attrDescWhere = NULL;
-	int attrValueLen = 0;
+	AttrDesc *attrDescArray = NULL;
 	if(attr != NULL) {
-		attrDescWhere = new AttrDesc;
-		status = attrCat->getInfo(attr->relName, attr->attrName, *attrDescWhere);
-		attrValueLen = attrDescWhere->attrLen;
+		attrDescArray = new AttrDesc;
+		status = attrCat->getInfo(attr->relName, attr->attrName, *attrDescArray);
 		if (status != OK) {
 			return status;
 		}
 	}
 
-	return ScanSelect(result, projCnt, projNamesDescs, attrDescWhere, op, attrValue, attrValueLen);
+	return ScanSelect(result, projCnt, projNamesDescs, attrDescArray, op, attrValue, reclen1);
 
 }
 
@@ -75,10 +77,12 @@ const Status ScanSelect(const string & result,
     temporaryRecord.data = (void *) outputData;
     temporaryRecord.length = reclen;
 
-	RID rid;
 	Status status;
-	int intValue;
-	float floatValue;
+
+	// change filter from char to integer and float values
+	int value;
+	float fvalue;
+
 
 	// open "result" as an InsertFileScan object
 	InsertFileScan resultRel(result, status);
@@ -106,18 +110,18 @@ const Status ScanSelect(const string & result,
 	// check attrType before scanning, then scan the current table
 	else {
 		switch(attrDesc->attrType) {
-			case STRING:
-				status = curScan.startScan(attrDesc->attrOffset, attrDesc->attrLen, (Datatype) attrDesc->attrType, filter, (Operator) op);
-				break;
-	
 			case INTEGER:
-		 		intValue = atoi(filter);
-				status = curScan.startScan(attrDesc->attrOffset, attrDesc->attrLen, (Datatype) attrDesc->attrType, (char *)&intValue, (Operator) op);
+				value = atoi(filter);
+				status = curScan.startScan(attrDesc->attrOffset, attrDesc->attrLen, (Datatype) attrDesc->attrType, (char *)&value, (Operator) op);
 				break;
 	
 			case FLOAT:
-				floatValue = atof(filter);
-				status = curScan.startScan(attrDesc->attrOffset, attrDesc->attrLen, (Datatype) attrDesc->attrType, (char *)&floatValue, (Operator) op);
+				fvalue = atof(filter);
+				status = curScan.startScan(attrDesc->attrOffset, attrDesc->attrLen, (Datatype) attrDesc->attrType, (char *)&fvalue, (Operator) op);
+				break;
+
+			case STRING:
+				status = curScan.startScan(attrDesc->attrOffset, attrDesc->attrLen, (Datatype) attrDesc->attrType, filter, (Operator) op);
 				break;
 		}
 	
@@ -126,63 +130,24 @@ const Status ScanSelect(const string & result,
 		}
 	}
 	
-	// cout << "Dumped at copying record" << endl;
 	RID relRID;
+	Record destRec;
 	//copy found record to temporary record
 	while (curScan.scanNext(relRID) == OK) {
-			Record destRec;
   			status = curScan.getRecord(destRec);
 			if (status != OK) {
 				break;
 			}
-      	
-    		// attrInfo attrList[projCnt];
-			// int tmpInt;
-			// float tmpFloat;
+    
 			int outputOffset = 0;
-
     		for(int i = 0; i < projCnt; i++) {
-				// AttrDesc attrDesc = projNames[i];
-
-				// switch(projNames[i].attrType){
-				// 	case INTEGER: 
-				// 		tmpInt = atoi((char *)destRec.data + attrDesc.attrOffset);
-				// 		memcpy(outputData + outputOffset, &tmpInt, attrDesc.attrLen);
-				// 		break;
-				// 	case FLOAT:
-				// 		tmpFloat = atof((char *)destRec.data + attrDesc.attrOffset);
-				// 		memcpy(outputData + outputOffset, &tmpFloat, attrDesc.attrLen);
-				// 		break;
-				// 	case STRING:
-				// 		memcpy((char *)outputData + outputOffset, (char *)destRec.data + attrDesc.attrOffset, attrDesc.attrLen);
-				// 		break;
-					
-
-				// 	case STRING:
-				// 		memcpy((char *)temporaryRecord.data + outputOffset, (char *)destRec.data + projNames[i].attrOffset, projNames[i].attrLen);
-				// 		break;
-				// 	case INTEGER:
-				// 		printf("%d\n", (char*)destRec.data + projNames[i].attrOffset);
-				// 		memcpy((char *)temporaryRecord.data + outputOffset, (int *)destRec.data + projNames[i].attrOffset, projNames[i].attrLen);
-				// 		// sprintf((char *)(temporaryRecord.data + outputOffset), "%d", tmpInt);
-				// 		break;
-				// 	case FLOAT:
-				// 		printf("%f\n", (char*)destRec.data + projNames[i].attrOffset);
-				// 		memcpy((char *)temporaryRecord.data + outputOffset, (float *)destRec.data + projNames[i].attrOffset, projNames[i].attrLen);
-				// 		// sprintf((char *)(temporaryRecord.data + outputOffset), "%f", tmpFloat);
-				// 		break;
-				// }
-
-
 				memcpy((char *)outputData + outputOffset, (char *)destRec.data + projNames[i].attrOffset, projNames[i].attrLen);
 
-				
 				outputOffset += projNames[i].attrLen;
-
   			}
 
 			RID outRid;
-			status = resultRel.insertRecord(destRec, outRid);
+			status = resultRel.insertRecord(temporaryRecord, outRid);
 			if(status != OK){
 				return status;
 			}
